@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>LLM Workflow Orchestration — Live Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#030912;--surface:rgba(6,16,36,0.9);--card:rgba(8,20,44,0.85);
+  --accent:#00d4ff;--accent2:#4f8ef7;--accent3:#a78bfa;
+  --green:#22c55e;--yellow:#fbbf24;--red:#ef4444;
+  --text:#dce8f5;--muted:#6a8099;--dim:#2a3f55;
+  --border:rgba(0,212,255,0.12);--border-h:rgba(0,212,255,0.3);
+  --mono:'JetBrains Mono',monospace;--ease:cubic-bezier(.4,0,.2,1);
+}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Poppins',sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column}
+
+/* Grid bg */
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,212,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,0.03) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}
+
+/* ── Top bar ── */
+.topbar{position:relative;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:12px 24px;background:rgba(3,9,18,0.95);border-bottom:1px solid var(--border);flex-shrink:0}
+.topbar-left{display:flex;align-items:center;gap:14px}
+.back-btn{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:.75rem;text-decoration:none;font-family:var(--mono);transition:color .2s;padding:6px 12px;border:1px solid var(--dim);border-radius:6px}
+.back-btn:hover{color:var(--accent);border-color:rgba(0,212,255,0.3)}
+.demo-title{font-size:.88rem;font-weight:600;color:#fff}
+.demo-title span{color:var(--accent);font-family:var(--mono)}
+.status-pill{display:flex;align-items:center;gap:6px;padding:4px 12px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:20px;font-size:.62rem;color:#4ade80;font-family:var(--mono)}
+.live-dot{width:6px;height:6px;border-radius:50%;background:#22c55e;animation:pulse 2s ease infinite}
+
+/* ── Layout ── */
+.layout{display:grid;grid-template-columns:320px 1fr;flex:1;overflow:hidden;position:relative;z-index:1}
+
+/* ── Pipeline panel ── */
+.pipeline{background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.panel-header{padding:16px 18px;border-bottom:1px solid var(--border);font-size:.72rem;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:1px;font-family:var(--mono);display:flex;align-items:center;gap:8px}
+.workflow-selector{padding:14px 16px;border-bottom:1px solid var(--border)}
+.ws-label{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-family:var(--mono);margin-bottom:8px}
+.ws-btns{display:flex;gap:6px;flex-wrap:wrap}
+.ws-btn{padding:5px 11px;font-size:.66rem;font-family:var(--mono);border-radius:5px;border:1px solid var(--dim);background:transparent;color:var(--muted);cursor:pointer;transition:all .2s}
+.ws-btn.active{background:rgba(0,212,255,0.1);border-color:rgba(0,212,255,0.3);color:var(--accent)}
+.pipeline-steps{padding:16px;flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
+.step{display:flex;align-items:flex-start;gap:12px;padding:12px;border-radius:8px;border:1px solid var(--dim);background:rgba(255,255,255,0.02);transition:all .3s}
+.step.active{border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.05);box-shadow:0 0 12px rgba(0,212,255,0.08)}
+.step.done{border-color:rgba(34,197,94,0.25);background:rgba(34,197,94,0.04)}
+.step.error{border-color:rgba(239,68,68,0.25);background:rgba(239,68,68,0.04)}
+.step-icon{width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0;background:var(--dim);color:var(--muted);transition:all .3s}
+.step.active .step-icon{background:rgba(0,212,255,0.15);color:var(--accent)}
+.step.done .step-icon{background:rgba(34,197,94,0.15);color:var(--green)}
+.step-info{flex:1;min-width:0}
+.step-name{font-size:.75rem;font-weight:600;color:#fff;margin-bottom:2px}
+.step-detail{font-size:.62rem;color:var(--muted);font-family:var(--mono);line-height:1.5}
+.step-status{font-size:.6rem;font-family:var(--mono);margin-top:4px}
+.step-status.running{color:var(--accent);animation:blink .9s ease infinite}
+.step-status.done{color:var(--green)}
+.step-status.idle{color:var(--dim)}
+
+/* Retrieved docs */
+.retrieved-docs{padding:0 16px 16px;display:flex;flex-direction:column;gap:6px}
+.retrieved-header{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-family:var(--mono);margin-bottom:4px}
+.doc-chip{padding:7px 10px;background:rgba(79,142,247,0.06);border:1px solid rgba(79,142,247,0.15);border-radius:6px;font-size:.63rem;color:var(--accent2);font-family:var(--mono);line-height:1.5;opacity:0;transform:translateY(4px);transition:all .3s}
+.doc-chip.show{opacity:1;transform:translateY(0)}
+.doc-score{float:right;color:var(--green);font-weight:600}
+
+/* ── Chat panel ── */
+.chat-panel{display:flex;flex-direction:column;overflow:hidden}
+.chat-messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px}
+.chat-messages::-webkit-scrollbar{width:3px}
+.chat-messages::-webkit-scrollbar-thumb{background:rgba(0,212,255,0.15);border-radius:4px}
+.msg{display:flex;gap:10px;align-items:flex-start;animation:fadeUp .3s var(--ease)}
+.msg.user{flex-direction:row-reverse}
+.msg-avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.75rem;flex-shrink:0;font-weight:600}
+.msg.user .msg-avatar{background:linear-gradient(135deg,#0b2a58,var(--accent2));color:#fff}
+.msg.agent .msg-avatar{background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.25);color:var(--accent)}
+.msg-bubble{max-width:78%;padding:12px 16px;border-radius:12px;font-size:.82rem;line-height:1.75}
+.msg.user .msg-bubble{background:linear-gradient(135deg,rgba(11,42,88,0.9),rgba(30,70,140,0.7));border:1px solid rgba(79,142,247,0.2);color:#fff;border-radius:12px 12px 4px 12px}
+.msg.agent .msg-bubble{background:rgba(6,18,40,0.9);border:1px solid var(--border);color:var(--text);border-radius:12px 12px 12px 4px}
+.msg-meta{font-size:.58rem;color:var(--muted);margin-top:5px;font-family:var(--mono)}
+.typing-indicator{display:flex;gap:4px;align-items:center;padding:4px 0}
+.typing-indicator span{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:typing 1.2s ease infinite}
+.typing-indicator span:nth-child(2){animation-delay:.2s}
+.typing-indicator span:nth-child(3){animation-delay:.4s}
+
+/* Input bar */
+.chat-input-bar{padding:14px 20px;border-top:1px solid var(--border);background:rgba(3,9,18,0.95);display:flex;gap:10px;align-items:flex-end;flex-shrink:0}
+.input-wrap{flex:1;position:relative}
+.chat-input{width:100%;background:rgba(8,20,44,0.9);border:1px solid var(--border);border-radius:10px;padding:11px 16px;color:var(--text);font-family:var(--mono);font-size:.8rem;outline:none;resize:none;line-height:1.5;transition:border-color .2s;max-height:100px}
+.chat-input:focus{border-color:rgba(0,212,255,0.35)}
+.chat-input::placeholder{color:var(--muted)}
+.send-btn{width:40px;height:40px;border-radius:9px;background:linear-gradient(135deg,#0b2a58,var(--accent2));border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.88rem;transition:all .22s;flex-shrink:0}
+.send-btn:hover{transform:scale(1.05);box-shadow:0 4px 14px rgba(79,142,247,0.3)}
+.send-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+
+/* Suggestions */
+.suggestions{padding:8px 20px 0;display:flex;gap:7px;flex-wrap:wrap}
+.sug{padding:5px 12px;font-size:.65rem;background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.12);border-radius:20px;color:var(--muted);cursor:pointer;font-family:var(--mono);transition:all .18s}
+.sug:hover{color:var(--accent);border-color:rgba(0,212,255,0.3);background:rgba(0,212,255,0.08)}
+
+/* Welcome */
+.welcome{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:40px;text-align:center}
+.welcome-icon{width:64px;height:64px;border-radius:16px;background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.2);display:flex;align-items:center;justify-content:center;font-size:1.6rem;color:var(--accent);margin:0 auto 16px;box-shadow:0 0 20px rgba(0,212,255,0.1)}
+.welcome h3{font-size:1.1rem;font-weight:700;color:#fff;margin-bottom:8px}
+.welcome p{font-size:.82rem;color:var(--muted);max-width:380px;line-height:1.75;margin-bottom:20px}
+.welcome-chips{display:flex;flex-wrap:wrap;gap:7px;justify-content:center}
+.wchip{padding:7px 14px;font-size:.7rem;background:rgba(79,142,247,0.07);border:1px solid rgba(79,142,247,0.18);border-radius:6px;color:var(--accent2);cursor:pointer;font-family:var(--mono);transition:all .2s}
+.wchip:hover{background:rgba(79,142,247,0.14);border-color:rgba(79,142,247,0.35);color:#fff}
+
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes typing{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-4px);opacity:1}}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-thumb{background:rgba(0,212,255,0.15);border-radius:4px}
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="topbar">
+  <div class="topbar-left">
+    <a href="index.html" class="back-btn"><i class="fas fa-arrow-left"></i> Back to Portfolio</a>
+    <div>
+      <div class="demo-title">LLM Workflow Orchestration <span>&amp; RAG Framework</span></div>
+    </div>
+  </div>
+  <div class="status-pill"><div class="live-dot"></div>LIVE DEMO</div>
+</div>
+
+<div class="layout">
+
+  <!-- Pipeline panel -->
+  <div class="pipeline">
+    <div class="panel-header"><i class="fas fa-project-diagram"></i> Workflow Pipeline</div>
+    <div class="workflow-selector">
+      <div class="ws-label">Mode</div>
+      <div class="ws-btns">
+        <button class="ws-btn active" onclick="setMode('sequential',this)">Sequential</button>
+        <button class="ws-btn" onclick="setMode('parallel',this)">Parallel</button>
+        <button class="ws-btn" onclick="setMode('multiagent',this)">Multi-Agent</button>
+      </div>
+    </div>
+    <div class="pipeline-steps">
+      <div class="step" id="step-query">
+        <div class="step-icon"><i class="fas fa-keyboard"></i></div>
+        <div class="step-info">
+          <div class="step-name">Query Processing</div>
+          <div class="step-detail">Tokenise + embed user query</div>
+          <div class="step-status idle" id="ss-query">● IDLE</div>
+        </div>
+      </div>
+      <div class="step" id="step-embed">
+        <div class="step-icon"><i class="fas fa-vector-square"></i></div>
+        <div class="step-info">
+          <div class="step-name">Embedding Generation</div>
+          <div class="step-detail">text-embedding-3-small</div>
+          <div class="step-status idle" id="ss-embed">● IDLE</div>
+        </div>
+      </div>
+      <div class="step" id="step-retrieval">
+        <div class="step-icon"><i class="fas fa-database"></i></div>
+        <div class="step-info">
+          <div class="step-name">Vector Retrieval</div>
+          <div class="step-detail" id="step-retrieval-detail">Qdrant · top-k=3 · hybrid</div>
+          <div class="step-status idle" id="ss-retrieval">● IDLE</div>
+        </div>
+      </div>
+      <div class="step" id="step-rerank">
+        <div class="step-icon"><i class="fas fa-sort-amount-down"></i></div>
+        <div class="step-info">
+          <div class="step-name">Re-ranking</div>
+          <div class="step-detail">Cross-encoder relevance score</div>
+          <div class="step-status idle" id="ss-rerank">● IDLE</div>
+        </div>
+      </div>
+      <div class="step" id="step-llm">
+        <div class="step-icon"><i class="fas fa-brain"></i></div>
+        <div class="step-info">
+          <div class="step-name">LLM Generation</div>
+          <div class="step-detail">claude-haiku-4-5 · RAG context</div>
+          <div class="step-status idle" id="ss-llm">● IDLE</div>
+        </div>
+      </div>
+    </div>
+    <div class="retrieved-docs" id="retrieved-docs" style="display:none">
+      <div class="retrieved-header">Retrieved Context</div>
+    </div>
+  </div>
+
+  <!-- Chat panel -->
+  <div class="chat-panel">
+    <div id="chat-area" class="chat-messages">
+      <div class="welcome" id="welcome-screen">
+        <div class="welcome-icon"><i class="fas fa-robot"></i></div>
+        <h3>RAG-Powered AI Assistant</h3>
+        <p>Ask anything about AI engineering, LLM systems, RAG pipelines, MLOps, or machine learning. The pipeline on the left shows each step in real time.</p>
+        <div class="welcome-chips">
+          <div class="wchip" onclick="sendSuggestion(this)">What is RAG?</div>
+          <div class="wchip" onclick="sendSuggestion(this)">How does vector search work?</div>
+          <div class="wchip" onclick="sendSuggestion(this)">Explain LangChain orchestration</div>
+          <div class="wchip" onclick="sendSuggestion(this)">What is MLflow used for?</div>
+          <div class="wchip" onclick="sendSuggestion(this)">Multi-agent vs sequential workflows</div>
+          <div class="wchip" onclick="sendSuggestion(this)">How do you fine-tune LLMs with LoRA?</div>
+        </div>
+      </div>
+    </div>
+    <div class="suggestions" id="suggestions">
+      <span class="sug" onclick="sendSuggestion(this)">What is RAG?</span>
+      <span class="sug" onclick="sendSuggestion(this)">Explain vector embeddings</span>
+      <span class="sug" onclick="sendSuggestion(this)">MLflow vs W&amp;B</span>
+      <span class="sug" onclick="sendSuggestion(this)">LangChain vs LlamaIndex</span>
+    </div>
+    <div class="chat-input-bar">
+      <div class="input-wrap">
+        <textarea id="chat-input" class="chat-input" rows="1" placeholder="Ask about LLMs, RAG, MLOps, Computer Vision..." onkeydown="handleKey(event)"></textarea>
+      </div>
+      <button class="send-btn" id="send-btn" onclick="sendMessage()"><i class="fas fa-paper-plane"></i></button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─── REPLACE THIS with your Cloudflare Worker URL after deploying ───
+const WORKER_URL = 'https://withered-sky-639f.danialmonachan24.workers.dev';
+// ─────────────────────────────────────────────────────────────────────
+
+// ─── REPLACE with your Cloudflare Worker URL after deploying ───
+const WORKER_URL = 'https://YOUR_WORKER_NAME.YOUR_SUBDOMAIN.workers.dev';
+// ──────────────────────────────────────────────────────────────────
+
+const SYSTEM_PROMPT = `You are an AI assistant powering Danial Monachan's LLM Workflow Orchestration & RAG Framework demo. Danial is an AI/ML Engineer at ASML Berlin, specialising in LLM systems, RAG pipelines, Computer Vision, and MLOps.
+
+Answer questions about AI engineering, LLMs, RAG systems, vector databases, LangChain, MLOps, computer vision, and related ML engineering topics. Be concise, technical, and insightful. Use bullet points where helpful.
+
+Start your response with a one-line "Retrieved context:" note (e.g. "Retrieved context: LangChain docs, RAG architecture paper") then a blank line, then your answer.`;
+
+const FAKE_DOCS = {
+  default: [
+    {text:'LangChain RAG architecture docs', score:'0.94'},
+    {text:'Vector DB comparison: Qdrant vs Chroma', score:'0.89'},
+    {text:'Hybrid search implementation guide', score:'0.82'},
+  ],
+  mlflow: [
+    {text:'MLflow tracking API reference', score:'0.96'},
+    {text:'Model registry best practices', score:'0.91'},
+    {text:'Experiment comparison tutorial', score:'0.85'},
+  ],
+  vision: [
+    {text:'Computer Vision defect detection paper', score:'0.95'},
+    {text:'PyTorch CNN architecture guide', score:'0.88'},
+    {text:'Gaussian-based anomaly detection', score:'0.83'},
+  ],
+};
+
+let currentMode = 'sequential';
+let isProcessing = false;
+
+function setMode(mode, btn) {
+  currentMode = mode;
+  document.querySelectorAll('.ws-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const detail = document.getElementById('step-retrieval-detail');
+  if (mode === 'parallel') detail.textContent = 'Qdrant + Chroma · parallel hybrid';
+  else if (mode === 'multiagent') detail.textContent = 'Multi-agent retrieval · 3 agents';
+  else detail.textContent = 'Qdrant · top-k=3 · hybrid';
+}
+
+function setStep(id, state, statusText) {
+  const step = document.getElementById('step-' + id);
+  const ss = document.getElementById('ss-' + id);
+  step.className = 'step' + (state ? ' ' + state : '');
+  ss.className = 'step-status ' + (state || 'idle');
+  ss.textContent = statusText;
+}
+
+function resetSteps() {
+  ['query','embed','retrieval','rerank','llm'].forEach(s => setStep(s, '', '● IDLE'));
+  document.getElementById('retrieved-docs').style.display = 'none';
+  document.getElementById('retrieved-docs').innerHTML = '<div class="retrieved-header">Retrieved Context</div>';
+}
+
+async function runPipeline(query) {
+  const delays = currentMode === 'parallel' ? [200,200,200,150,0] : [300,400,500,300,0];
+
+  setStep('query','active','▶ RUNNING');
+  await sleep(delays[0]);
+  setStep('query','done','✓ DONE · 128-dim');
+
+  setStep('embed','active','▶ ENCODING');
+  await sleep(delays[1]);
+  setStep('embed','done','✓ DONE · 1536-dim');
+
+  setStep('retrieval','active','▶ SEARCHING');
+  await sleep(delays[2]);
+  setStep('retrieval','done','✓ DONE · 3 docs');
+
+  // Show docs
+  const docSet = query.toLowerCase().includes('mlflow') || query.toLowerCase().includes('track') ? FAKE_DOCS.mlflow
+    : query.toLowerCase().includes('vision') || query.toLowerCase().includes('defect') ? FAKE_DOCS.vision
+    : FAKE_DOCS.default;
+  const docsEl = document.getElementById('retrieved-docs');
+  docsEl.style.display = 'flex';
+  docsEl.style.flexDirection = 'column';
+  docsEl.style.gap = '6px';
+  docsEl.style.padding = '0 16px 16px';
+  for (const doc of docSet) {
+    const d = document.createElement('div');
+    d.className = 'doc-chip';
+    d.innerHTML = doc.text + `<span class="doc-score">${doc.score}</span>`;
+    docsEl.appendChild(d);
+    await sleep(80);
+    requestAnimationFrame(() => requestAnimationFrame(() => d.classList.add('show')));
+  }
+
+  setStep('rerank','active','▶ SCORING');
+  await sleep(delays[3]);
+  setStep('rerank','done','✓ DONE · sorted');
+
+  setStep('llm','active','▶ GENERATING');
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function addMessage(role, content, meta='') {
+  const welcome = document.getElementById('welcome-screen');
+  if (welcome) welcome.remove();
+
+  const area = document.getElementById('chat-area');
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  const icon = role === 'user' ? 'DM' : '<i class="fas fa-robot"></i>';
+  div.innerHTML = `
+    <div class="msg-avatar">${icon}</div>
+    <div>
+      <div class="msg-bubble">${content}</div>
+      ${meta ? `<div class="msg-meta">${meta}</div>` : ''}
+    </div>`;
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+  return div;
+}
+
+function addTyping() {
+  const welcome = document.getElementById('welcome-screen');
+  if (welcome) welcome.remove();
+  const area = document.getElementById('chat-area');
+  const div = document.createElement('div');
+  div.className = 'msg agent';
+  div.id = 'typing-msg';
+  div.innerHTML = `<div class="msg-avatar"><i class="fas fa-robot"></i></div><div><div class="msg-bubble"><div class="typing-indicator"><span></span><span></span><span></span></div></div></div>`;
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+}
+
+async function sendMessage() {
+  if (isProcessing) return;
+  const input = document.getElementById('chat-input');
+  const query = input.value.trim();
+  if (!query) return;
+
+  isProcessing = true;
+  input.value = '';
+  input.style.height = 'auto';
+  document.getElementById('send-btn').disabled = true;
+
+  resetSteps();
+  addMessage('user', escHtml(query));
+  addTyping();
+
+  const t0 = Date.now();
+  const pipelinePromise = runPipeline(query);
+
+  let responseText = '';
+  try {
+    responseText = await window.claude.complete({
+      messages: [{ role: 'user', content: query }],
+      system: SYSTEM_PROMPT,
+    });
+  } catch(e) {
+    responseText = 'Retrieved context: local knowledge base\n\n' + e.message;
+  }
+
+  await pipelinePromise;
+  setStep('llm','done','✓ DONE');
+
+  const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+
+  // Remove typing
+  const typing = document.getElementById('typing-msg');
+  if (typing) typing.remove();
+
+  // Clean up "Retrieved context:" line, format rest
+  const lines = responseText.split('\n');
+  let ctxLine = '', body = responseText;
+  if (lines[0].startsWith('Retrieved context:')) {
+    ctxLine = lines[0];
+    body = lines.slice(2).join('\n');
+  }
+
+  const formatted = escHtml(body)
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`(.*?)`/g, '<code style="background:rgba(0,212,255,0.1);padding:1px 5px;border-radius:3px;font-family:var(--mono);font-size:.78em">$1</code>')
+    .replace(/\n/g, '<br/>');
+
+  const meta = `${currentMode.toUpperCase()} · ${elapsed}s · claude-haiku-4-5${ctxLine ? ' · ' + ctxLine.replace('Retrieved context: ','') : ''}`;
+  addMessage('agent', formatted, meta);
+
+  isProcessing = false;
+  document.getElementById('send-btn').disabled = false;
+  input.focus();
+}
+
+function sendSuggestion(el) {
+  document.getElementById('chat-input').value = el.textContent;
+  sendMessage();
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function escHtml(t) {
+  return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Auto-resize textarea
+document.getElementById('chat-input').addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+});
+</script>
+</body>
+</html>
