@@ -372,12 +372,20 @@ async function sendMessage() {
 
   let responseText = '';
   try {
-    responseText = await window.claude.complete({
-      messages: [{ role: 'user', content: query }],
-      system: SYSTEM_PROMPT,
+    const res = await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system: SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: query }],
+        max_tokens: 512,
+      }),
     });
+    const data = await res.json();
+    if (data.error) throw new Error(JSON.stringify(data.error));
+    responseText = data.text;
   } catch(e) {
-    responseText = 'Retrieved context: local knowledge base\n\n' + e.message;
+    responseText = 'Retrieved context: local knowledge base\n\n⚠️ Could not reach AI backend.\n\nError: ' + e.message;
   }
 
   await pipelinePromise;
